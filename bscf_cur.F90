@@ -10,7 +10,7 @@
        real, dimension(numz) :: z, zhf
        real, dimension(numphi) :: phi, sine, cosine
        real :: com, pi, rhom1, rhom2, ret1, ret2, dr, dz, dphi, dpot, dpsi
-       real :: factor, gamma, n, cnvgom, cnvgc1, cnvgc2, cnvgh1, cnvgh2
+       real :: factor, gamma, n1, cnvgom, cnvgc1, cnvgc2, cnvgh1, cnvgh2
        real :: s1, s2, stot, t1, t2, ttot, w1, w2, wtot, j1, j2, jtot
        real :: e1, e2, etot, en1, en2, entot, pm1, pm2, virialerr, virialerr1
        real :: virialerr2, eps, position, separation, xavg1, xavg2
@@ -21,30 +21,23 @@
        real :: timef, stime, ftime
        integer :: i, j, k, q, iam
        integer :: ra, phia, za, rb, phib, zb, rc, phic, zc, rm1, phim1, zm1
-       integer :: rm2, phim2, zm2, qfinal, rmax, star2maxr, maxterm, isym
-       integer :: npoint, iprint, icall, flag, isave, rochemax1, rochemax2
+       integer :: rm2, phim2, zm2, qfinal, rmax, star2maxr
+       integer :: flag, isave, rochemax1, rochemax2
        integer, dimension(3) :: rminloc, rmaxloc
        integer :: primary, initial, start_center_1, start_center_2
        integer :: louter1, louter2, model_num
        real :: radius_start_1, radius_start_2, d
        character(len=50) :: dens_file, dens_template
 
-!  variables for poisson solver
-       real redge 
+!  Variables for poisson solver
        real dummy2(numphi), dummy3(numphi), grav
        real dd3(numr), dd4(numz), dd5, dd6, dd7, dd8
        common /pois/ pot, rho
        common /blok6/ dphi, dummy2, dummy3, pi, grav
        common /grid/ r, z, rhf, zhf, dd3, dd4, dd5, dd6, dd7, dd8
-       call cpu_time(stime)
 
-!  Initialize the mystery parameters for Poisson Solver
-       maxterm = 10
-       isym = -2
-       redge = 1.0
-       npoint = 10
-       iprint = 1
-       icall = 0
+       call cpu_time(stime)
+       
 !  Initialize the grid
        grav = 1.0
        pi = acos(-1.0)
@@ -80,14 +73,15 @@
        zb = 2
        zc = 2
        eps = 2.0e-4
-       n = 1.5
+       n1 = 1.5
+
        rmax = numr - 8
-       gamma = 1.0 + 1.0/n
+       gamma = 1.0 + 1.0/n1
        epsilon = 1.0e-5
 
        dens_template = 'density'
 
-       !  Re-Initialize variables
+!  Re-Initialize variables
        omsq = 0.0
        hm1 = 0.0
        hm2 = 0.0
@@ -95,7 +89,7 @@
        c2 = 0.0
 
 
-       ! generate the initial model
+! generate the initial model
        select case(initial) 
           case (1)		!  roll your own initial Gaussian rho
           start_center_1 = ( ra - rb )  / 2 + rb
@@ -223,7 +217,7 @@
 
        end select
 
-       !  Calculate the initial total mass for each star
+!  Calculate the initial total mass for each star
        do i = 1,numphi
           do j = 2, numz
              do k = 2, numr
@@ -235,7 +229,7 @@
        mass1(1) = factor*ret1
        mass2(1) = factor*ret2
 
-       !  Calculate the initial center of mass
+!  Calculate the initial center of mass
        do i = 1, numphi
           do j = 2,numz
              do k = 2,numr
@@ -247,6 +241,7 @@
        xavg1 = factor*ret1/mass1(1)
        xavg2 = factor*ret2/mass2(1)
        separation = xavg1 - xavg2
+       
        do i = 1, numphi
           do j = 2, numz
              do k = 2, numr
@@ -256,11 +251,13 @@
        enddo
        com = factor * com / (mass1(1) + mass2(1))
 
-       do q = 2,maxit		!  START OF THE ITERATION
-         
-          !  Solve Poisson's equation for gravitational potential, calculate
-          !  the new centrifugal potential, angular frequency and integration
-          !  constants
+       
+!  START OF THE ITERATION
+       do q = 2,maxit		
+          print*, "Iteration number = ",q
+!  Solve Poisson's equation for gravitational potential, calculate
+!  the new centrifugal potential, angular frequency and integration
+!  constants
           if( q == 2 ) then
              call setbdy(icall,isym)
              call bdygen(maxterm,isym,redge)
@@ -273,19 +270,23 @@
              pot_it = 0.5*(pot + pot_old)
              pot_old = pot
           endif 
+          
           pottmp1 = 0.5*(pot_it(ra,za,phia) + pot_it(ra-1,za,phia))
           pottmp2 = 0.5*(pot_it(rb,zb,phib) + pot_it(rb+1,zb,phib))
           dpot = pottmp1 - pottmp2
+          
           do i = 1,numphi
              do j = 2,numr
                 psi(j,i) = -0.5*( (rhf(j)*cosine(i)-com)**2 +        &
                            rhf(j)*rhf(j)*sine(i)*sine(i))
              enddo
           enddo
+          
           psitmp1 = 0.5*(psi(rb,phib) + psi(rb+1,phib))
           psitmp2 = 0.5*(psi(ra,phia) + psi(ra-1,phia))
           dpsi = psitmp1 - psitmp2 
           omsq(q) = dpot/dpsi
+          
           pottmp1 = 0.5*(pot_it(rb,zb,phib) + pot_it(rb+1,zb,phib))
           psitmp1 = 0.5*(psi(rb,phib) + psi(rb+1,phib))
           pottmp2 = 0.5*(pot_it(rc,zc,phic) + pot_it(rc+1,zc,phic))
@@ -293,7 +294,7 @@
           c1(q) = pottmp1 + omsq(q)*psitmp1
           c2(q) = pottmp2 + omsq(q)*psitmp2
 
-          !  Calculate new enthalpy field and max enthalpies and their positions
+!  Calculate new enthalpy field and max enthalpies and their positions
           do i = 1,phi1+1
              do j = 2,numz
                 do k = 2,rmax
@@ -334,12 +335,12 @@
              enddo
           enddo 
 
-          !  Calculate new density field from enthalpy field
+!  Calculate new density field from enthalpy field
           do i = 1,phi1+1
              do j = 2,numz
                 do k = 2,numr
                    if(h(k,j,i).gt.0.0) then
-                      rho(k,j,i) = rhom1*(h(k,j,i)/hm1(q))**n
+                      rho(k,j,i) = rhom1*(h(k,j,i)/hm1(q))**n1
                    else
                       rho(k,j,i) = 0.0
                    endif
@@ -350,7 +351,7 @@
              do j = 2,numz
                 do k = 2,numr
                    if(h(k,j,i).gt.0.0) then
-                      rho(k,j,i) = rhom2*(h(k,j,i)/hm2(q))**n
+                      rho(k,j,i) = rhom2*(h(k,j,i)/hm2(q))**n1
                    else
                       rho(k,j,i) = 0.0
                    endif
@@ -361,15 +362,16 @@
              do j = 2,numz
                 do k = 2,numr
                    if(h(k,j,i).gt.0.0) then
-                      rho(k,j,i) = rhom1*(h(k,j,i)/hm1(q))**n
+                      rho(k,j,i) = rhom1*(h(k,j,i)/hm1(q))**n1
                    else
                       rho(k,j,i) = 0.0
                    endif
                 enddo
              enddo
           enddo
-          !  zero out grid between inner boundary points for both stars and
-          !  the z axis 
+          
+!  zero out grid between inner boundary points for both stars and
+!  the z axis 
           do i = phi4, numphi
              do j = 2, numz
                 do k = 2, rb
@@ -394,7 +396,7 @@
           rho(:,1,:) = rho(:,2,:)	! equatorial boundary condition
           rho(1,:,:) = cshift(rho(2,:,:),dim=2,shift=numphi/2)	! axial b.c. 
 
-          !  Calculate total mass in each star
+!  Calculate total mass in each star
           do i = 1, numphi
              do j = 2, numz
                 do k = 2, numr
@@ -406,7 +408,7 @@
           mass1(q) = factor*ret1
           mass2(q) = factor*ret2
 
-          !  Calculate center of mass for current density field
+!  Calculate center of mass for current density field
           xavg1 = 0.0
           xavg2 = 0.0
           separation = 0.0
@@ -472,8 +474,8 @@
           enddo
        enddo
        call bin_sum(temp, ret1, ret2)
-       s1 = factor*ret1/(n+1.0)
-       s2 = factor*ret2/(n+1.0)
+       s1 = factor*ret1/(n1+1.0)
+       s2 = factor*ret2/(n1+1.0)
        stot = s1 + s2
        
        !  Compute total potential energy of each star
@@ -505,8 +507,8 @@
        virialerr = abs(2.0*ttot + 3.0*stot + wtot) / abs(wtot)
        virialerr1 = abs(2.0*t1 + 3.0*s1 + w1) / abs(w1)
        virialerr2 = abs(2.0*t2 + 3.0*s2 + w2) / abs(w2)
-       pm1 = rho(rm1,zm1,phim1)*hm1(qfinal)/(n+1.0)
-       pm2 = rho(rm2,zm2,phim2)*hm2(qfinal)/(n+1.0)
+       pm1 = rho(rm1,zm1,phim1)*hm1(qfinal)/(n1+1.0)
+       pm2 = rho(rm2,zm2,phim2)*hm2(qfinal)/(n1+1.0)
        kappa1 = pm1/rhom1**gamma
        kappa2 = pm2/rhom2**gamma
        period = 2.0*pi/omega
@@ -535,8 +537,8 @@
           enddo
        enddo
        call bin_sum(temp, ret1, ret2)
-       e1 = n*factor*kappa1*ret1
-       e2 = n*factor*kappa2*ret2
+       e1 = n1*factor*kappa1*ret1
+       e2 = n1*factor*kappa2*ret2
        etot = e1 + e2
 
        !  Calculate total energoies
@@ -867,7 +869,7 @@
            write(11,*) 'Roche Lobe of *2 off grid'
        endif
        write(11,*)
-       write(11,*) 'Execution Time = ',(ftime-stime)/60000.0,' minutes'
+       write(11,*) 'Execution Time = ',(ftime-stime)/60.0,' minutes'
        write(11,*)
        write(11,*) '==========================================================================================='
        write(11,*)
@@ -891,9 +893,49 @@
        write(15) rho
        close(15) 
 
+       
+       open(unit=10,file="star1")
+         do j=1,numz
+           do i=1,numr  
+             write(10,*) i,j,rho(i,j,1) 
+           enddo
+           write(10,*)
+         enddo
+       close(10)       
+       
+       open(unit=10,file="pot1")
+         do j=1,numz
+           do i=1,numr  
+             write(10,*) i,j,pot(i,j,1) 
+           enddo
+           write(10,*)
+         enddo
+       close(10)  
+       
+       
+       
+       open(unit=10,file="star2")
+         do j=1,numz
+           do i=1,numr  
+             write(10,*) i,j,rho(i,j,256) 
+           enddo
+           write(10,*)
+         enddo
+       close(10) 
+       
+       open(unit=10,file="pot2")
+         do j=1,numz
+           do i=1,numr  
+             write(10,*) i,j,pot(i,j,256) 
+           enddo
+           write(10,*)
+         enddo
+       close(10)
+       
        end subroutine binary_scf
 
        subroutine bin_sum(temp, ret1, ret2)
+!!Finds summation of density for each component of the binary
        implicit none
        include 'startup.h'
        real, intent(in), dimension(numr,numz,numphi) :: temp
